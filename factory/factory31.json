@@ -1,0 +1,9 @@
+{
+	"name": "factory31",
+	"location": "koreacentral",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "62aa9b2f-62d1-476a-b2f9-74a2fc24a8e3",
+		"tenantId": "5eb86a08-6be6-4995-8db0-9a73561037b4"
+	}
+}
