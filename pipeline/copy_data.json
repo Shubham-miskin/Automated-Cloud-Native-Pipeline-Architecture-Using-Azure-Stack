@@ -1,0 +1,130 @@
+{
+	"name": "copy_data",
+	"properties": {
+		"activities": [
+			{
+				"name": "For Each Month",
+				"type": "ForEach",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@range(1,12)",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "Copy data",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "ParquetSource",
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET"
+									},
+									"formatSettings": {
+										"type": "ParquetReadSettings"
+									}
+								},
+								"sink": {
+									"type": "ParquetSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "ParquetWriteSettings"
+									}
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "dynamic_nyc_dataset",
+									"type": "DatasetReference",
+									"parameters": {
+										"year": {
+											"value": "@pipeline().parameters.year",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@if(less(item(),10), concat('0', string(item())), string(item()))",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "bronze_container",
+									"type": "DatasetReference",
+									"parameters": {
+										"year": {
+											"value": "@pipeline().parameters.year",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@if(less(item(),10), concat('0', string(item())), string(item()))",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "skipped_month",
+							"type": "AppendVariable",
+							"dependsOn": [
+								{
+									"activity": "Copy data",
+									"dependencyConditions": [
+										"Failed"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "skipped_month",
+								"value": {
+									"value": "@if(less(item(),10), concat('0', string(item())), string(item()))",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"year": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"skipped_month": {
+				"type": "Array"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-03-16T07:21:30Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

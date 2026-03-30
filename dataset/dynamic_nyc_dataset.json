@@ -1,0 +1,31 @@
+{
+	"name": "dynamic_nyc_dataset",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "nyc_web",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"year": {
+				"type": "string"
+			},
+			"month": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Parquet",
+		"typeProperties": {
+			"location": {
+				"type": "HttpServerLocation",
+				"relativeUrl": {
+					"value": "@concat('trip-data',\n        '/',\n        'green_tripdata_',\n        dataset().year,\n        '-',\n        dataset().month,\n        '.parquet')",
+					"type": "Expression"
+				}
+			},
+			"compressionCodec": "snappy"
+		},
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}
