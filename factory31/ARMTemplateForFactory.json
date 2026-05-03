@@ -1,0 +1,436 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "factory31"
+		},
+		"mylakeplace31_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'mylakeplace31'"
+		},
+		"mylakeplace31_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://mylakeplace31.dfs.core.windows.net/"
+		},
+		"nyc_web_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://d37ci6vzurychx.cloudfront.net"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/Ingestion_pipeline')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get Metadata",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "metadata",
+								"type": "DatasetReference",
+								"parameters": {
+									"year": {
+										"value": "@pipeline().parameters.year",
+										"type": "Expression"
+									}
+								}
+							},
+							"fieldList": [
+								"exists"
+							],
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "If Year Exists",
+						"type": "IfCondition",
+						"dependsOn": [
+							{
+								"activity": "Get Metadata",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"expression": {
+								"value": "@activity('Get Metadata').output.exists",
+								"type": "Expression"
+							},
+							"ifFalseActivities": [
+								{
+									"name": "Copy_nyc_data",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "copy_data",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"year": {
+												"value": "@pipeline().parameters.year",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"year": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-03-12T13:25:09Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/metadata')]",
+				"[concat(variables('factoryId'), '/pipelines/copy_data')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/copy_data')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "For Each Month",
+						"type": "ForEach",
+						"dependsOn": [],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@range(1,12)",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "ParquetSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "ParquetReadSettings"
+											}
+										},
+										"sink": {
+											"type": "ParquetSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "ParquetWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "dynamic_nyc_dataset",
+											"type": "DatasetReference",
+											"parameters": {
+												"year": {
+													"value": "@pipeline().parameters.year",
+													"type": "Expression"
+												},
+												"month": {
+													"value": "@if(less(item(),10), concat('0', string(item())), string(item()))",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "bronze_container",
+											"type": "DatasetReference",
+											"parameters": {
+												"year": {
+													"value": "@pipeline().parameters.year",
+													"type": "Expression"
+												},
+												"month": {
+													"value": "@if(less(item(),10), concat('0', string(item())), string(item()))",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Append_Skipped_Month",
+									"type": "AppendVariable",
+									"dependsOn": [
+										{
+											"activity": "Copy data",
+											"dependencyConditions": [
+												"Failed"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "skipped_month",
+										"value": {
+											"value": "@if(less(item(),10), concat('0', string(item())), string(item()))",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Log_Skipped_Months",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "For Each Month",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "final_output",
+							"value": {
+								"value": "@join(variables('skipped_month'), ', ')",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"year": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"skipped_month": {
+						"type": "Array"
+					},
+					"final_output": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-03-16T07:21:30Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/dynamic_nyc_dataset')]",
+				"[concat(variables('factoryId'), '/datasets/bronze_container')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/bronze_container')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "mylakeplace31",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"year": {
+						"type": "string"
+					},
+					"month": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@concat(\n    'green_tripdata_',\n    dataset().year,\n    '-',\n    dataset().month,\n    '.parquet')",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@concat(dataset().year,\n'/',\ndataset().month)",
+							"type": "Expression"
+						},
+						"fileSystem": {
+							"value": "@concat('bronze','/','trip-data')",
+							"type": "Expression"
+						}
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/mylakeplace31')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/dynamic_nyc_dataset')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "nyc_web",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"year": {
+						"type": "string"
+					},
+					"month": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "HttpServerLocation",
+						"relativeUrl": {
+							"value": "@concat('trip-data',\n        '/',\n        'green_tripdata_',\n        dataset().year,\n        '-',\n        dataset().month,\n        '.parquet')",
+							"type": "Expression"
+						}
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/nyc_web')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/metadata')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "mylakeplace31",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"year": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": {
+							"value": "@concat('trip-data/', dataset().year)",
+							"type": "Expression"
+						},
+						"fileSystem": "bronze"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/mylakeplace31')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/mylakeplace31')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('mylakeplace31_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('mylakeplace31_accountKey')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/nyc_web')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "HttpServer",
+				"typeProperties": {
+					"url": "[parameters('nyc_web_properties_typeProperties_url')]",
+					"enableServerCertificateValidation": true,
+					"authenticationType": "Anonymous"
+				}
+			},
+			"dependsOn": []
+		}
+	]
+}
