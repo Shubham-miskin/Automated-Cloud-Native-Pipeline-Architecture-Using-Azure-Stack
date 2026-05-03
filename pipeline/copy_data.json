@@ -90,7 +90,7 @@
 							]
 						},
 						{
-							"name": "skipped_month",
+							"name": "Append_Skipped_Month",
 							"type": "AppendVariable",
 							"dependsOn": [
 								{
@@ -111,6 +111,30 @@
 						}
 					]
 				}
+			},
+			{
+				"name": "Log_Skipped_Months",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "For Each Month",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "final_output",
+					"value": {
+						"value": "@join(variables('skipped_month'), ', ')",
+						"type": "Expression"
+					}
+				}
 			}
 		],
 		"parameters": {
@@ -121,6 +145,9 @@
 		"variables": {
 			"skipped_month": {
 				"type": "Array"
+			},
+			"final_output": {
+				"type": "String"
 			}
 		},
 		"annotations": [],
